@@ -67,6 +67,17 @@ md"""
 To answer this question, let's take advantage of the features of [DataFrames](https://dataframes.juliadata.org/stable/) and do in-memory filtering of the dataset using the [filter](https://dataframes.juliadata.org/stable/lib/functions/#Base.filter) command. Let's filter on the [enzyme commission number (ec number)](https://en.wikipedia.org/wiki/Enzyme_Commission_number).
 """
 
+# ╔═╡ 894095f6-8a99-4980-88eb-e20a4f190bfe
+begin
+	function lowercase_strings(df::DataFrame)
+		for row in eachrow(describe(df))
+			if row[:eltype] === String
+				df[!, row[:variable]] = lowercase.(df[!, row[:variable]])
+			end
+		end
+	end
+end
+
 # ╔═╡ 70239f9d-1ea8-4ad2-92a3-126cd99de4f0
 md"""
 ### C3: Include dilution but ignore metabolite data in the bounds
@@ -96,11 +107,41 @@ md"""
 ##### Compute specific growth rate
 """
 
+# ╔═╡ 34682c11-8139-4e7e-8a8b-bcfafa8ce628
+begin
+
+	# default value for μ -
+	μ = 0.0 # units: 1/s
+	t = 20
+    μ= log(2)/(t) * 1/3600 #units: 1/s
+	
+	with_terminal() do
+		println("Specific growth rate μ = $(μ) s⁻¹")
+	end
+end
+
 # ╔═╡ a7df4d41-1c0f-422e-8f21-c84b812ac3cd
 md"""
 ##### Concentration conversion factor
 Assume HL60 cells are spherical. Use [bionumbers]() to formulate a concentration conversion factor between M and $\mu$mol/gDW concentration units.
 """
+
+# ╔═╡ e891e546-f275-4cc8-beb4-0447094f01b2
+begin
+
+	# Need: convert mol/L to μmol/gDW-hr
+	CF = 0.0
+	d = 12.4
+	V = ((4/3)*pi*((d/2)^3))*(1e-15)
+	f = 0.70 
+	m = 1e-9
+	CF = V/m*1/(1-f)*1e6
+	#mol/L * VHL60 * { mol/cell} * {1cell/weight HL60} * {gram/grams dry weight}
+	
+	with_terminal() do
+		println("Conversion factor (M -> μmol/gDW) CF = $(CF)")
+	end
+end
 
 # ╔═╡ b552fa38-cdc2-4f46-917f-4cac78694c86
 md"""
@@ -119,6 +160,21 @@ md"""
 md"""
 ### C4: Include both dilution and metabolite data in bounds
 """
+
+# ╔═╡ fca0ae0f-607a-4144-9b30-e237df7f43af
+begin
+	
+	# background color plots -
+    background_color_outside = RGB(1.0, 1.0, 1.0)
+    background_color = RGB(0.99, 0.98, 0.96)
+    CB_BLUE = RGB(68 / 255, 119 / 255, 170 / 255)
+    CB_LBLUE = RGB(102 / 255, 204 / 255, 238 / 255)
+    CB_GRAY = RGB(187 / 255, 187 / 255, 187 / 255)
+    CB_RED = RGB(238 / 255, 102 / 255, 119 / 255)
+
+	# show -
+	nothing
+end
 
 # ╔═╡ 58a35e5c-2f3c-4818-a290-7b8ae509320f
 function ingredients(path::String)
@@ -225,7 +281,7 @@ begin
 	result_case_1 = lib.flux(S,flux_bounds_array,species_bounds_array,c_vector);
 
 	# show -
-	nothing
+	flux_bounds_array
 end
 
 # ╔═╡ 4dce933f-693c-4788-9c77-63784871a4c0
@@ -275,6 +331,26 @@ begin
 	
 end
 
+# ╔═╡ 07ca2450-8a84-4e71-adcf-91b12a1544ee
+begin
+
+	# grab data from the [Met]/Km col -
+	col_key = Symbol("[Met]/Km")
+	length1 = 1000
+	saturation_data_set = sort(metabolite_table[!,col_key])[1:length1]
+	number_of_bins = round(Int64,0.25*length1)
+	
+	# make a histogram plot -
+	stephist(saturation_data_set, bins = number_of_bins, normed = :true,
+                background_color = background_color, background_color_outside = background_color_outside,
+                foreground_color_minor_grid = RGB(1.0, 1.0, 1.0),
+                lw = 2, c = CB_RED, foreground_color_legend = nothing, label = "N = $(length1)")
+
+	# label the axis -
+	xlabel!("Metabolite saturation xᵢ/Kₘ (dimensionless)",fontsize=18)
+	ylabel!("Instance count", fontsize=18)
+end
+
 # ╔═╡ 85e1ac31-90cf-48da-b4d7-b6c009328084
 
 begin
@@ -306,17 +382,6 @@ begin
 	
 
 	
-end
-
-# ╔═╡ 894095f6-8a99-4980-88eb-e20a4f190bfe
-begin
-	function lowercase_strings(df::DataFrame)
-		for row in eachrow(describe(df))
-			if row[:eltype] === String
-				df[!, row[:variable]] = lowercase.(df[!, row[:variable]])
-			end
-		end
-	end
 end
 
 # ╔═╡ 66262910-8fc5-4f14-b63e-ef432573b5bf
@@ -352,13 +417,28 @@ begin
 
 		species_per_rxn = DataFrame()
 		isolate_df = DataFrame()
-		for rxn_num in 2:4
+		rxn6 = DataFrame()
+		rxn7 = DataFrame()
+		for rxn_num in 2:7
 			#all the species with the stoichiometric coefficient for one reaction
+			rxn_name = col_names[rxn_num]
+			if rxn_num == 6 || rxn_num == 7
+				len = length(rxn_name)
+				rxn_name = SubString(rxn_name, 1, len-1)
+			end
 			single_rxn = species_rxn_df[:, [:"Metabolite", col_names[rxn_num]]]
-			X = single_rxn[:, col_names[rxn_num]] .!= 0
+			X = single_rxn[:, col_names[rxn_num]] .> 0
 			species_per_rxn = single_rxn[X, :] #contains the species in rxn_num that participate in reaction
+
+			#test section
+			if rxn_num == 6
+				rxn6 = rxn_name
+			elseif rxn_num == 7
+				rxn7 = species_per_rxn
+			end
+			#end test section
 		
-			isolate_bool = df[:, "EC Number"] .== col_names[rxn_num]
+			isolate_bool = df[:, "EC Number"] .== rxn_name
 			isolate_df = df[isolate_bool, :] #isolate the rows of the ec number df based on reaction
 		
 			lowercase_strings(species_per_rxn) #converts the metabolite names to lowercase
@@ -372,6 +452,7 @@ begin
 					ec_species = isolate_df[row,"Metabolite"]
 					if occursin(ec_species, species)
 						organism = "Homo sapiens"
+						
 						if isolate_df[row, "Organism"] == organism
 							
 							value = isolate_df[row, "[Met]/Km"]
@@ -385,7 +466,7 @@ begin
 			upper_bound_frac = numerator_acc / (denominator_acc - 1)
 			flux_bounds_array2[rxn_num-1, 2] *= upper_bound_frac
 		end
-		flux_bounds_array2
+
 		
 	
 		#occursin(isolate_df[1, "Metabolite"], species_per_rxn[2, :Metabolite])
@@ -406,38 +487,17 @@ end
 
 
 # ╔═╡ 35296b0e-9811-426a-a8a6-3fe1ab4091be
-#Prints out the flux bound array for 
+#Prints out the flux bound array for C2
 flux_bounds_array2
 
-# ╔═╡ 34682c11-8139-4e7e-8a8b-bcfafa8ce628
-begin
+# ╔═╡ 2ceca0c6-4979-47d0-9b9d-24d8cb068313
+isolate_df
 
-	# default value for μ -
-	μ = 0.0 # units: 1/s
-	t = 20
-    μ= log(2)/(t) * 1/3600 #units: 1/s
-	
-	with_terminal() do
-		println("Specific growth rate μ = $(μ) s⁻¹")
-	end
-end
+# ╔═╡ 1b9f7cbb-7f1e-4fa3-97f1-695be8c438ee
+species_per_rxn
 
-# ╔═╡ e891e546-f275-4cc8-beb4-0447094f01b2
-begin
-
-	# Need: convert mol/L to μmol/gDW-hr
-	CF = 0.0
-	d = 12.4
-	V = ((4/3)*pi*((d/2)^3))*(1e-15)
-	f = 0.70 
-	m = 1e-9
-	CF = V/m*1/(1-f)*1e6
-	#mol/L * VHL60 * { mol/cell} * {1cell/weight HL60} * {gram/grams dry weight}
-	
-	with_terminal() do
-		println("Conversion factor (M -> μmol/gDW) CF = $(CF)")
-	end
-end
+# ╔═╡ 91f1185c-e854-4b06-aff4-8aa10c977585
+rxn6
 
 # ╔═╡ c1878272-dd06-46b3-84f3-6d05c459688a
 begin
@@ -592,41 +652,6 @@ let
 		pretty_table(state_table; header=header_row, alignment=:l)
 	end
 	
-end
-
-# ╔═╡ fca0ae0f-607a-4144-9b30-e237df7f43af
-begin
-	
-	# background color plots -
-    background_color_outside = RGB(1.0, 1.0, 1.0)
-    background_color = RGB(0.99, 0.98, 0.96)
-    CB_BLUE = RGB(68 / 255, 119 / 255, 170 / 255)
-    CB_LBLUE = RGB(102 / 255, 204 / 255, 238 / 255)
-    CB_GRAY = RGB(187 / 255, 187 / 255, 187 / 255)
-    CB_RED = RGB(238 / 255, 102 / 255, 119 / 255)
-
-	# show -
-	nothing
-end
-
-# ╔═╡ 07ca2450-8a84-4e71-adcf-91b12a1544ee
-begin
-
-	# grab data from the [Met]/Km col -
-	col_key = Symbol("[Met]/Km")
-	length = 1000
-	saturation_data_set = sort(metabolite_table[!,col_key])[1:length]
-	number_of_bins = round(Int64,0.25*length)
-	
-	# make a histogram plot -
-	stephist(saturation_data_set, bins = number_of_bins, normed = :true,
-                background_color = background_color, background_color_outside = background_color_outside,
-                foreground_color_minor_grid = RGB(1.0, 1.0, 1.0),
-                lw = 2, c = CB_RED, foreground_color_legend = nothing, label = "N = $(length)")
-
-	# label the axis -
-	xlabel!("Metabolite saturation xᵢ/Kₘ (dimensionless)",fontsize=18)
-	ylabel!("Instance count", fontsize=18)
 end
 
 # ╔═╡ f472e85e-8f51-11ec-25e8-e94287a542b6
@@ -1972,12 +1997,15 @@ version = "0.9.1+5"
 # ╠═70d11054-4d8a-4dcc-a8cd-1f762c2dd9b8
 # ╟─12eef416-b3ab-4f03-8ac0-a9783dcca9bd
 # ╠═880ce921-308b-4e3c-8bd9-fb9d07d18bd3
-# ╟─07ca2450-8a84-4e71-adcf-91b12a1544ee
+# ╠═07ca2450-8a84-4e71-adcf-91b12a1544ee
 # ╟─e2917845-d956-45f0-a379-ea826caf7d88
 # ╠═85e1ac31-90cf-48da-b4d7-b6c009328084
 # ╠═894095f6-8a99-4980-88eb-e20a4f190bfe
 # ╠═66262910-8fc5-4f14-b63e-ef432573b5bf
 # ╠═35296b0e-9811-426a-a8a6-3fe1ab4091be
+# ╠═2ceca0c6-4979-47d0-9b9d-24d8cb068313
+# ╠═1b9f7cbb-7f1e-4fa3-97f1-695be8c438ee
+# ╠═91f1185c-e854-4b06-aff4-8aa10c977585
 # ╟─70239f9d-1ea8-4ad2-92a3-126cd99de4f0
 # ╟─cb7d76b8-85f9-4886-a4f3-3f9fb82e42dc
 # ╠═d3a2474e-f502-4247-bba6-1f7d5f88f12d
